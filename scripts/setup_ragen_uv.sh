@@ -45,6 +45,15 @@ for arg in "$@"; do
     esac
 done
 
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log()  { echo -e "${GREEN}[$(date '+%H:%M:%S')]${NC} $*"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
+die()  { echo -e "${RED}[FATAL]${NC} $*" >&2; exit 1; }
+
 print_step() {
     echo
     echo "[setup_ragen] $1"
@@ -88,7 +97,7 @@ install_ragen() {
     fi
 
     print_step "Installing RAGEN in editable mode${extras_str:+ with extras: }${extras_str}"
-    uv pip install -e ".${extras_str}"
+    uv pip install -e ".${extras_str}" --no-deps
 }
 
 install_verl() {
@@ -112,10 +121,16 @@ install_verl() {
     pushd verl >/dev/null
 
     # ---- Step 1: inference frameworks ----
-    print_step "  [verl] Installing sglang + vllm..."
-    uv pip install "sglang[all]==0.5.2" "vllm==0.11.0" --no-cache-dir || {
-        warn "sglang/vllm install failed, trying without sglang..."
-        uv pip install "vllm==0.11.0" --no-cache-dir
+    print_step "  [verl] Installing vllm..."
+    # Install vllm first (sglang is optional and may fail on restricted mirrors)
+    uv pip install "vllm>=0.8.0" --no-cache-dir || {
+        warn "vllm install failed — this is critical, but continuing..."
+        warn "You may need to install vllm manually."
+    }
+
+    print_step "  [verl] Installing sglang (optional)..."
+    uv pip install "sglang[all]>=0.5.0" --no-cache-dir 2>/dev/null || {
+        warn "sglang install skipped (not critical for most environments)"
     }
 
     # ---- Step 2: basic packages ----
