@@ -1,0 +1,95 @@
+[project]
+name = "ragen"
+version = "0.1"
+description = "RAGEN: Training Agents by Reinforcing Reasoning"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "RAGEN Team" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+]
+
+dependencies = [
+    "IPython",
+    "matplotlib",
+    "gym",
+    "gym_sokoban",
+    "peft",
+    "accelerate",
+    "codetiming",
+    "datasets",
+    "dill",
+    "hydra-core",
+    "numpy",
+    "pandas",
+    "pybind11",
+    "ray>=2.10",
+    "tensordict>=0.8.0,<0.9.0",
+    "transformers",
+    "vllm==0.8.2",
+    "wandb",
+    "gymnasium",
+    "gymnasium[toy-text]",
+    "pyarrow>=15.0.0",
+    "pylatexenc",
+    "torchdata",
+    "debugpy",
+    "together",
+    "anthropic",
+    "faiss-cpu==1.11.0",
+]
+
+[project.optional-dependencies]
+webshop = [
+    "beautifulsoup4",
+    "cleantext",
+    "flask",
+    "html2text",
+    "rank_bm25",
+    "pyserini",
+    "thefuzz",
+    "gdown",
+    "spacy",
+    "rich",
+]
+lean = [
+    "kimina-client",
+]
+search = [
+    "requests",
+    "sentence-transformers",
+    "flask",
+]
+all = [
+    # Includes all optional deps
+    "beautifulsoup4",
+    "cleantext",
+    "flask",
+    "html2text",
+    "rank_bm25",
+    "pyserini",
+    "thefuzz",
+    "gdown",
+    "spacy",
+    "rich",
+    "kimina-client",
+    "requests",
+    "sentence-transformers",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+packages = { find = { include = ["ragen*"] } }
+
+[tool.setuptools.package-data]
+ragen = ["*/*.md"]
+
+[tool.uv]
+# uv-specific settings
