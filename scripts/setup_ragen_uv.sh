@@ -94,13 +94,6 @@ install_ragen() {
 install_verl() {
     print_step "Installing verl dependencies (vllm, sglang, flash-attn, etc.)"
 
-    # NOTE: The verl install script downloads Linux x86_64 pre-built wheels
-    # (flash-attn, flashinfer). On macOS / non-Linux, this step will fail.
-    # For macOS development, you can skip verl-specific GPU packages and
-    # install a minimal set:
-    #   uv pip install -e verl/ --no-deps
-    #   uv pip install vllm sglang  # these may also not work on macOS
-
     local platform
     platform=$(uname -s)
     if [[ "${platform}" != "Linux" ]]; then
@@ -110,10 +103,83 @@ install_verl() {
         echo "If it fails, install verl minimal: uv pip install -e verl/ --no-deps"
     fi
 
+    # Detect CUDA version for pre-built wheel selection
+    local cuda_ver="124"
+    if command -v nvcc &>/dev/null; then
+        cuda_ver=$(nvcc --version | grep -oP 'release \K[0-9]+\.[0-9]+' | tr -d '.')
+    fi
+
     pushd verl >/dev/null
-    USE_MEGATRON=0 bash scripts/install_vllm_sglang_mcore.sh
+
+    # ---- Step 1: inference frameworks ----
+    print_step "  [verl] Installing sglang + vllm..."
+    uv pip install "sglang[all]==0.5.2" "vllm==0.11.0" --no-cache-dir || {
+        warn "sglang/vllm install failed, trying without sglang..."
+        uv pip install "vllm==0.11.0" --no-cache-dir
+    }
+
+    # ---- Step 2: basic packages ----
+    print_step "  [verl] Installing basic packages..."
+    uv pip install \
+        "transformers[hf_xet]>=4.51.0" accelerate datasets peft hf-transfer \
+        "numpy<2.0.0" "pyarrow>=15.0.0" pandas "tensordict>=0.8.0,<=0.10.0,!=0.9.0" torchdata \
+        "ray[default]" codetiming hydra-core pylatexenc qwen-vl-utils wandb dill pybind11 liger-kernel mathruler \
+        pytest py-spy pre-commit ruff tensorboard \
+        "nvidia-ml-py>=12.560.30" "fastapi[standard]>=0.115.0" "optree>=0.13.0" "pydantic>=2.9" "grpcio>=1.62.1"
+
+    # ---- Step 3: FlashAttention (pre-built wheel) ----
+    print_step "  [verl] Installing FlashAttention (pre-built wheel)..."
+    local fa_wheel="flash_attn-2.8.1+cu12torch2.8cxx11abiFALSE-cp312-cp312-linux_x86_64.whl"
+    local fa_url="https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.1/${fa_wheel}"
+
+    if python -c "import flash_attn" 2>/dev/null; then
+        echo "  flash-attn already installed, skipping."
+    else
+        if [[ ! -f "${fa_wheel}" ]]; then
+            wget -nv "${fa_url}" || {
+                warn "Failed to download flash-attn wheel — skipping"
+            }
+        fi
+        if [[ -f "${fa_wheel}" ]]; then
+            uv pip install --no-cache-dir "./${fa_wheel}"
+            rm -f "${fa_wheel}"
+        fi
+    fi
+
+    # ---- Step 3b: FlashInfer (pre-built wheel, skip source build) ----
+    print_step "  [verl] Installing FlashInfer (pre-built wheel)..."
+    if python -c "import flashinfer" 2>/dev/null; then
+        echo "  flashinfer already installed, skipping."
+    else
+        # Try pre-built wheel first (avoids source-build timeout)
+        local fi_wheel="flashinfer_python-0.3.1+cu${cuda_ver}torch2.8-cp312-cp312-linux_x86_64.whl"
+        local fi_url="https://github.com/flashinfer-ai/flashinfer/releases/download/v0.3.1/${fi_wheel}"
+
+        if wget -q --spider "${fi_url}" 2>/dev/null; then
+            wget -nv "${fi_url}"
+            uv pip install --no-cache-dir "./${fi_wheel}" && rm -f "${fi_wheel}"
+        else
+            warn "FlashInfer pre-built wheel not available at ${fi_url}"
+            warn "Skipping flashinfer (source build would timeout)."
+            warn "This is OK — training will work without it, just slightly slower."
+        fi
+    fi
+
+    # ---- Step 4: opencv ----
+    print_step "  [verl] Installing opencv..."
+    uv pip install opencv-python opencv-fixer 2>/dev/null || true
+    python -c "from opencv_fixer import AutoFix; AutoFix()" 2>/dev/null || true
+
+    # ---- Step 5: cudnn ----
+    print_step "  [verl] Installing cudnn..."
+    uv pip install nvidia-cudnn-cu12==9.10.2.21 2>/dev/null || true
+
+    # ---- Install verl itself ----
+    print_step "  [verl] Installing verl in editable mode..."
     uv pip install --no-deps -e .
+
     popd >/dev/null
+    print_step "verl installation complete"
 }
 
 install_base_deps() {
