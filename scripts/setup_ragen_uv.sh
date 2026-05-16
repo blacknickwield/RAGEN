@@ -122,11 +122,20 @@ install_verl() {
 
     # ---- Step 1: inference frameworks ----
     print_step "  [verl] Installing vllm..."
-    # Install vllm first (sglang is optional and may fail on restricted mirrors)
-    uv pip install "vllm>=0.8.0" --no-cache-dir || {
-        warn "vllm install failed — this is critical, but continuing..."
-        warn "You may need to install vllm manually."
-    }
+    if python -c "import vllm" 2>/dev/null; then
+        echo "  vllm already installed ($(python -c 'import vllm; print(vllm.__version__)')), skipping."
+    else
+        # vllm >= 0.10 requires CUDA 13; pin to <0.10 for CUDA 12
+        local vllm_constraint="vllm>=0.8.0"
+        if [[ "${cuda_ver:0:2}" == "12" ]]; then
+            vllm_constraint="vllm>=0.8.0,<0.10.0"
+            echo "  CUDA 12 detected, using ${vllm_constraint}"
+        fi
+        uv pip install "${vllm_constraint}" --no-cache-dir || {
+            warn "vllm install failed — this is critical, but continuing..."
+            warn "You may need to install vllm manually."
+        }
+    fi
 
     print_step "  [verl] Installing sglang (optional)..."
     uv pip install "sglang[all]>=0.5.0" --no-cache-dir 2>/dev/null || {
