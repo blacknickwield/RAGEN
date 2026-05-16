@@ -80,7 +80,14 @@ create_or_reuse_venv() {
         print_step "Using existing virtual environment at ${VENV_DIR}"
     else
         print_step "Creating virtual environment at ${VENV_DIR} (Python 3.12)"
-        uv venv "${VENV_DIR}" --python 3.12
+        local venv_args="--python 3.12"
+        # If base image has working torch+vllm, inherit them to avoid version conflicts
+        if python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null && \
+           python3 -c "import vllm" 2>/dev/null; then
+            venv_args="${venv_args} --system-site-packages"
+            echo "  GPU packages (torch, vllm) detected in base image, inheriting via --system-site-packages"
+        fi
+        uv venv "${VENV_DIR}" ${venv_args}
     fi
 
     print_step "Activating virtual environment"
@@ -144,7 +151,19 @@ install_verl() {
 
     # ---- Step 2: basic packages ----
     print_step "  [verl] Installing basic packages..."
+    # Pin torch to the version already present (system or previously installed)
+    # to prevent downstream packages from pulling an incompatible upgrade
+    local torch_pin=""
+    if python -c "import torch" 2>/dev/null; then
+        local _tv
+        _tv=$(python -c "import torch; print(torch.__version__)" 2>/dev/null | grep -oP '^\d+\.\d+\.\d+')
+        if [[ -n "${_tv}" ]]; then
+            torch_pin="torch==${_tv}"
+            echo "  torch ${_tv} detected, pinning to avoid upgrade"
+        fi
+    fi
     uv pip install \
+        ${torch_pin} \
         "transformers[hf_xet]>=4.51.0" accelerate datasets peft hf-transfer \
         "numpy<2.0.0" "pyarrow>=15.0.0" pandas "tensordict>=0.8.0,<=0.10.0,!=0.9.0" torchdata \
         "ray[default]" codetiming hydra-core pylatexenc qwen-vl-utils wandb dill pybind11 liger-kernel mathruler \
