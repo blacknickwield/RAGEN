@@ -10,6 +10,11 @@ set -euo pipefail
 # Usage:
 #   bash scripts/setup_ragen.sh
 #   PYTHON_BIN=/path/to/python bash scripts/setup_ragen.sh
+#   USE_USER_SITE=1 bash scripts/setup_ragen.sh
+#
+# Notes:
+# - USE_USER_SITE=1 installs Python packages into the current user's site-packages,
+#   usually under ~/.local, which avoids permission errors on system Python.
 #
 # Validation:
 # - Verified on NVIDIA H100, H200, and B200.
@@ -27,6 +32,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
+USE_USER_SITE="${USE_USER_SITE:-0}"
+
+if [[ "${USE_USER_SITE}" == "1" ]]; then
+    export PIP_USER=1
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
 
 # Parse optional environment flags
 WITH_SEARCH=0
@@ -50,7 +61,11 @@ ensure_python() {
     fi
 
     print_step "Using Python executable"
-    "${PYTHON_BIN}" -c 'import sys; print(sys.executable); print(sys.version)'
+    "${PYTHON_BIN}" -c 'import site, sys; print(sys.executable); print(sys.version); print("user site:", site.getusersitepackages())'
+
+    if [[ "${USE_USER_SITE}" == "1" ]]; then
+        print_step "USE_USER_SITE=1 enabled; pip packages will be installed with --user"
+    fi
 }
 
 validate_repo_root() {
@@ -61,7 +76,11 @@ validate_repo_root() {
 }
 
 pip_install() {
-    "${PYTHON_BIN}" -m pip install "$@"
+    if [[ "${USE_USER_SITE}" == "1" ]]; then
+        "${PYTHON_BIN}" -m pip install --user "$@"
+    else
+        "${PYTHON_BIN}" -m pip install "$@"
+    fi
 }
 
 setup_search() {
@@ -188,7 +207,13 @@ main() {
 
     print_step "Setup complete"
     echo "Installed into Python environment:"
-    "${PYTHON_BIN}" -c 'import sys; print(sys.executable)'
+    "${PYTHON_BIN}" -c 'import site, sys; print(sys.executable); print("user site:", site.getusersitepackages())'
+
+    if [[ "${USE_USER_SITE}" == "1" ]]; then
+        echo
+        echo "Note: USE_USER_SITE=1 was used. Make sure ~/.local/bin is in PATH:"
+        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
 }
 
 main "$@"
