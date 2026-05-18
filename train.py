@@ -190,55 +190,18 @@ def run_ppo(config) -> None:
         if ray_init_kwargs is None:
             ray_init_kwargs = {}
 
-        # 关键：禁用 runtime_env 里的 pip / working_dir / py_modules / uri 等下载逻辑
-        old_runtime_env = ray_init_kwargs.get("runtime_env", {}) or {}
-        old_env_vars = old_runtime_env.get("env_vars", {}) or {}
-
-        ray_init_kwargs["runtime_env"] = {
-            "env_vars": {
-                "TOKENIZERS_PARALLELISM": "true",
-                "NCCL_DEBUG": "WARN",
-                "VLLM_LOGGING_LEVEL": "WARN",
-                "RAY_DEBUG": "legacy",
-                **old_env_vars,
-            }
+        runtime_env = ray_init_kwargs.get("runtime_env", {}) or {}
+        runtime_env_env_vars = runtime_env.get("env_vars", {}) or {}
+        runtime_env["env_vars"] = {
+            'TOKENIZERS_PARALLELISM': 'true',
+            'NCCL_DEBUG': 'WARN',
+            'VLLM_LOGGING_LEVEL': 'WARN',
+            "RAY_DEBUG": "legacy",  # used here for simpler breakpoint()
+            **runtime_env_env_vars,
         }
-
+        ray_init_kwargs["runtime_env"] = runtime_env
         print(f"ray init kwargs: {ray_init_kwargs}")
         ray.init(**ray_init_kwargs)
-        
-        # ray_init_cfg = config.get("ray_kwargs", {}).get("ray_init", {})
-        # ray_init_kwargs = OmegaConf.to_container(ray_init_cfg, resolve=True) if ray_init_cfg is not None else {}
-        # if ray_init_kwargs is None:
-        #     ray_init_kwargs = {}
-
-        # ray_init_kwargs.pop("runtime_env", None)
-
-        # os.environ["TOKENIZERS_PARALLELISM"] = "true"
-        # os.environ["NCCL_DEBUG"] = "WARN"
-        # os.environ["VLLM_LOGGING_LEVEL"] = "WARN"
-        # os.environ["RAY_DEBUG"] = "legacy"
-
-        # print(f"ray init kwargs: {ray_init_kwargs}")
-        # ray.init(**ray_init_kwargs)
-        
-        # ray_init_cfg = config.get("ray_kwargs", {}).get("ray_init", {})
-        # ray_init_kwargs = OmegaConf.to_container(ray_init_cfg, resolve=True) if ray_init_cfg is not None else {}
-        # if ray_init_kwargs is None:
-        #     ray_init_kwargs = {}
-
-        # runtime_env = ray_init_kwargs.get("runtime_env", {}) or {}
-        # runtime_env_env_vars = runtime_env.get("env_vars", {}) or {}
-        # runtime_env["env_vars"] = {
-        #     'TOKENIZERS_PARALLELISM': 'true',
-        #     'NCCL_DEBUG': 'WARN',
-        #     'VLLM_LOGGING_LEVEL': 'WARN',
-        #     "RAY_DEBUG": "legacy",  # used here for simpler breakpoint()
-        #     **runtime_env_env_vars,
-        # }
-        # ray_init_kwargs["runtime_env"] = runtime_env
-        # print(f"ray init kwargs: {ray_init_kwargs}")
-        # ray.init(**ray_init_kwargs)
 
     runner = TaskRunner.remote()
     ray.get(runner.run.remote(config))
